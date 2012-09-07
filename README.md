@@ -241,8 +241,7 @@ This part is easy. Just like writing CL macros :-)
                       ,(mapcar (lambda (name)
                                  `(:stat
                                    (:assign t
-                                            (:dot (:name "this")
-                                                  (:name ,name))
+                                            (:dot (:name "this") ,name)
                                             (:name ,name))))
                                names))))
 
@@ -257,9 +256,9 @@ Let's test it:
                           (:ARGS (:SEQ (:NAME "name") (:NAME "shoeSize"))))))
         (defclass-expander invocation))
     (:FUNCTION NIL ("name" "shoeSize")
-     ((:STAT (:ASSIGN T (:DOT (:NAME "this") (:NAME "name")) (:NAME "name")))
+     ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
       (:STAT
-       (:ASSIGN T (:DOT (:NAME "this") (:NAME "shoeSize")) (:NAME "shoeSize")))))
+       (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
 
 Looks OK. Let's tell Cheat-JS about our function:
 
@@ -327,14 +326,16 @@ ParenScript (mostly because you need to be a lisper to fully use
 Cheat-JS). I (Miron Brezuleanu) wrote a few thousands of lines of
 ParenScript code and found that there is some 'impedance mismatch'
 between ParenScript and JavaScript (especially around the '.' operator
-in JavaScript and modules in JavaScript). I found it harder to write
-code in ParenScript than in JavaScript, and the presence of macros
-didn't compensate for this extra effort. I tried to find a way to have
-macros while writing something closer to JavaScript. Cheat-JS is what
-I came up with.
+in JavaScript and modules in JavaScript). This was most likely my
+fault: instead of writing Lisp to be compiled to JavaScript, I was
+trying to write JavaScript with s-expressions. I found it harder to
+write code in ParenScript than in JavaScript, and the presence of
+macros didn't compensate for this extra effort. I tried to find a way
+to have macros while writing something closer to JavaScript. Cheat-JS
+is what I came up with.
 
 Thanks for taking the time to read about Cheat-JS; I hope you'll find
-it useful!
+it useful (or at least amusing - or both)!
 
 Please use the Github
 [issues page](https://github.com/mbrezu/cheat-js/issues) to report any

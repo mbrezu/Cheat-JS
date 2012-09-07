@@ -11,5 +11,18 @@
            #:*macro-hook*))
 
 (defpackage #:cheat-js
-  (:use #:cl))
+  (:use #:cl)
+  (:export
+   :register-args-macro
+   :register-macro
+   :register-body-macro
+   :register-args-and-body-macro
+   :clear-macros
+   :parse-js
+   :run-tests
+   :register-macro-expander
+   :explode))
+
+(defpackage #:cheat-js-tests
+  (:use #:cl #:fiveam))
 
