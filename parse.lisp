@@ -304,17 +304,21 @@
         body)))
 
   (def macro-vars (closing-char)
-    (let ((body (loop
+    (let ((args (loop
                    until (and (eq :punc (token-type token))
                               (char= closing-char (token-value token)))
-                   collect (expression))))
+                   collect (expression nil)
+                   when (and (eq :punc (token-type token))
+                             (char= #\, (token-value token)))
+                   do (next))))
       (unless (and (eq :punc (token-type token))
                    (char= closing-char (token-value token)))
         (token-error token "Expected '~a', but read token '~a'."
                      closing-char
                      (token-id token)))
-      (next) ;; The semicolon between args and body.
-      body))
+      (next) ;; The semicolon between args and body (or the closing
+             ;; paren).
+      args))
 
   (def macro-custom-parse ()
     (when (and (eq (token-type token) :name)
@@ -344,7 +348,7 @@
         ((:args)
          (let ((name-token token))
            (next) ;; The name.
-           (next) ;; The open paren.           
+           (next) ;; The open paren.
            (let ((vars (macro-vars #\))))
              (list :macro-call
                    (list (token-type name-token)

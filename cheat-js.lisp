@@ -65,7 +65,12 @@
                     (unless macro-record
                       (error (format nil "Cheat-JS: unknown macro \"~a\"."
                                      macro-name)))
-                    (macroexpand-all 
+                    (unless (macro-record-expander macro-record)
+                      (error (format
+                              nil
+                              "Cheat-JS: no expander defined for macro \"~a\"."
+                              macro-name)))
+                    (macroexpand-all
                      (funcall (macro-record-expander macro-record)
                               ast)))))
                (t (mapcar #'macroexpand-all ast))))
@@ -76,4 +81,3 @@
 
 (defun run-tests ()
   (fiveam:run! :cheat-js-tests))
-

@@ -379,7 +379,7 @@ Let's use it:
         alert(1);
         alert(2);
     }();"
-    
+
 Oops. Some parens got dropped. This is not really an issue, the
 resulting JavaScript is still valid. Let's try another example:
 
@@ -388,10 +388,137 @@ resulting JavaScript is still valid. Let's try another example:
         alert(1);
         alert(2);
     })();"
-    
+
 Good! The parens were required this time, and they are there.
 
+Now that we have `@iife` we can write a safer `@defclass` (and also
+see an example of combining Cheat-JS macros).
+
 ### Defining a safer `@defclass`
+
+We used the following Javascript 'class definition' for the
+`@defclass` example:
+
+    var Person = function(name, shoeSize)
+    {
+        this.name = name;
+        this.shoeSize = shoeSize;
+    };
+
+This code has a well-known problem. To create a `Person` object, one
+should use a call like `new Person('John', 42);` (John's shoe size is
+the answer to everything but John is rather boring). If we forget the
+`new`, we are in trouble, because `this` inside the function no longer
+refers to a newly created object, but to `window`, the global
+object. John's marvelous shoe size ends up in the global scope.
+
+Isn't there a way around this? Let's try to define `Person` like this:
+
+    var Person = (function () {
+        function Person(name, shoeSize) {
+            this.name = name;
+            this.shoeSize = shoeSize;
+        }
+        return function (name, shoeSize) {
+            return new Person(name, shoeSize);
+        };
+    }());
+
+Now it doesn't matter if we use `new` or we leave it out. A new
+`Person` object is always returned. The new definition is a bit
+verbose, though. Maybe we can use... a macro?
+
+Let's examine the three pieces of data we need for a new macro. The
+invocation in JavaScript:
+
+    var Person = @defclass(Person, name, shoeSize);
+
+This is certainly more like it, conciseness-wise.
+
+Our new `@defclass`, like the old one, is an 'args only` macro:
+
+    > (cheat-js:register-args-macro "@defclass")
+
+What about the expansion? Do we want the expansion shown above, or is
+it possible to expand to something shorter? This is a macro-combining
+opportunity, let's not waste it. The expansion is:
+
+    var Person = @iife(
+        function Person(name, shoeSize) {
+            this.name = name;
+            this.shoeSize = shoeSize;
+        };
+        return function (name, shoeSize) {
+            return new Person(name, shoeSize);
+        };
+    );
+
+The AST of the invocation:
+
+    > (cheat-js:parse-js "var Person = @defclass(Person, name, shoeSize);")
+    (:TOPLEVEL
+     ((:VAR
+       (("Person" :MACRO-CALL (:NAME "@defclass")
+         (:ARGS
+          (:SEQ (:NAME "Person") (:SEQ (:NAME "name") (:NAME "shoeSize")))))))))
+
+Let's make sure Cheat-JS knows what kind of macro `@iife` is (just in
+case we restarted the REPL since we last defined `@iife`):
+
+    > (cheat-js:register-body-macro "@iife")
+
+Now we can ask `cheat-js` about AST of the expansion:
+
+    > (cheat-js:parse-js "var Person = @iife(
+                              function Person(name, shoeSize) {
+                                  this.name = name;
+                                  this.shoeSize = shoeSize;
+                              };
+                              return function (name, shoeSize) {
+                                  return new Person(name, shoeSize);
+                              };
+                          );")
+    (:TOPLEVEL
+     ((:VAR
+       (("Person" :MACRO-CALL (:NAME "@iife")
+         (:BODY
+          (:DEFUN "Person" ("name" "shoeSize")
+           ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
+            (:STAT
+             (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
+          (:BLOCK NIL)
+          (:RETURN
+           (:FUNCTION NIL ("name" "shoeSize")
+            ((:RETURN
+              (:NEW (:NAME "Person") ((:NAME "name") (:NAME "shoeSize")))))))))))))
+
+So our `:MACRO-CALL` expands into a new `:MACRO-CALL`. Cheat-JS should
+be able to handle this, like a good little macroexpander.
+
+To make writing the expansion function easier, let's isolate the
+source and target ASTs. The invocation:
+
+    (:MACRO-CALL (:NAME "@defclass")
+               (:ARGS
+                (:SEQ (:NAME "Person")
+                 (:SEQ (:NAME "name")
+                       (:NAME "shoeSize")))))
+
+and our desired expansion:
+
+    (:MACRO-CALL (:NAME "@iife")
+     (:BODY
+      (:DEFUN "Person" ("name" "shoeSize")
+       ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
+        (:STAT (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
+      (:BLOCK NIL)
+      (:RETURN
+       (:FUNCTION NIL ("name" "shoeSize")
+        ((:RETURN (:NEW (:NAME "Person") ((:NAME "name")
+                                          (:NAME "shoeSize")))))))))
+
+Wow. This time we generate more code. In order to have macros over
+ASTs of manageable dimensions, we'd better combine them.
 
 ### Defining `@when-let`
 
