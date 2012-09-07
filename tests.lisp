@@ -32,3 +32,29 @@
     this.name = name;
     this.shoeSize = shoeSize;
 };"))))
+
+(defun iife-expander (invocation)
+  `(:CALL (:FUNCTION NIL NIL ,(rest (third invocation)))
+          NIL))
+
+(test iife
+  (cheat-js:clear-macros)
+  (cheat-js:register-body-macro "@iife")
+  (let ((js-code "var a = @iife(alert(1);alert(2););"))
+    (is (equal (cheat-js:parse-js js-code)
+               '(:TOPLEVEL
+                 ((:VAR
+                   (("a" :MACRO-CALL (:NAME "@iife")
+                         (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+                                (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))))))))
+    (cheat-js:register-macro-expander "@iife" #'iife-expander)
+    (is (equal (cheat-js:explode "var a = @iife(alert(1);alert(2););")
+           "var a = function() {
+    alert(1);
+    alert(2);
+}();"))
+    (is (equal (cheat-js:explode "@iife(alert(1);alert(2););")
+           "(function() {
+    alert(1);
+    alert(2);
+})();"))))

@@ -38,6 +38,19 @@ is define transformations to be applied on the output of
 <code>parse-js</code>. This is what Cheat-JS does: get the <code>parse-js</code> AST, apply
 the transformations, convert back to JavaScript code.</p>
 
+<p>The idea is rather obvious - the main reason Cheat-JS exists is that I
+could not find something similar on the net. There are probably many
+people who privately do similar things with tools like <code>parse-js</code> and
+the pretty-printer part of <code>cl-uglify-js</code> - that, or my Google skills
+failed me :)</p>
+
+<h2>BIG WARNING</h2>
+
+<p>I haven't used Cheat-JS on any large projects. I don't have enough
+imagination to compensate for this lack of experience, so it may have
+a lot of problems I haven't thought about. Right now it's just a proof
+of concept.</p>
+
 <h2>Some simple examples</h2>
 
 <p>Instead of writing:</p>
@@ -150,16 +163,19 @@ code required is standard CL).</p>
 <pre><code>(cheat-js:run-tests)
 </code></pre>
 
-<p>should give you some confidence that things are not obviously broken
-(They are most likely broken, but in subtle ways).</p>
+<p>gives some confidence that things are not obviously broken (they are
+most likely broken, but in ways that are subtle enough to fool the
+tests).</p>
 
-<p>The next section should provide you with some pointers on how to
-define your Cheat-JS macros.</p>
+<p>The next section will provide you with some pointers on how to define
+your Cheat-JS macros. If you run into problems, look at the
+<code>tests.lisp</code> file for example code - the code there matches the text
+in the next section.</p>
 
 <h2>Your first Cheat-JS macros</h2>
 
-<p>Before running <code>cheat-js:macroexpand-all</code> on your JavaScript source
-code, you need to install your macros.</p>
+<p>Before running <code>cheat-js:explode</code> on your JavaScript source code, you
+need to install your macros.</p>
 
 <p>First reset the list of installed macros,</p>
 
@@ -171,7 +187,7 @@ code, you need to install your macros.</p>
 <ul>
 <li>how the macro invocation call looks like (what you want to write in
 the JavaScript source code); this is the macro's "API"; it is
-JavaScript code (or almost) and the parsed AST;</li>
+JavaScript code (or almost) and the parsed AST for that code;</li>
 <li>how the macro expansion looks like; this is the macro's "result";
 it is an AST tree;</li>
 <li>how to transform the AST of the invocation into the AST of the
@@ -256,8 +272,7 @@ it's because the list following <code>:VAR</code> is made of conses, not lists).
                   ,(mapcar (lambda (name)
                              `(:stat
                                (:assign t
-                                        (:dot (:name "this")
-                                              (:name ,name))
+                                        (:dot (:name "this") ,name)
                                         (:name ,name))))
                            names))))
 </code></pre>
@@ -273,9 +288,9 @@ the expansion show above (s-expression starting with <code>(:FUNCTION...</code>)
                       (:ARGS (:SEQ (:NAME "name") (:NAME "shoeSize"))))))
     (defclass-expander invocation))
 (:FUNCTION NIL ("name" "shoeSize")
- ((:STAT (:ASSIGN T (:DOT (:NAME "this") (:NAME "name")) (:NAME "name")))
+ ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
   (:STAT
-   (:ASSIGN T (:DOT (:NAME "this") (:NAME "shoeSize")) (:NAME "shoeSize")))))
+   (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
 </code></pre>
 
 <p>Looks OK. Let's tell Cheat-JS about our function:</p>
@@ -285,7 +300,7 @@ the expansion show above (s-expression starting with <code>(:FUNCTION...</code>)
 
 <p>Now we can ask Cheat-JS to macroexpand our code:</p>
 
-<pre><code>&gt; (cheat-js:macroexpand-all "var Person = @defclass(name, shoeSize);")
+<pre><code>&gt; (cheat-js:explode "var Person = @defclass(name, shoeSize);")
 "var Person = function(name, shoeSize)
 {
     this.name = name;
@@ -298,6 +313,113 @@ the expansion show above (s-expression starting with <code>(:FUNCTION...</code>)
 <p>On to <code>@iife</code>.</p>
 
 <h3>Defining <code>@iife</code></h3>
+
+<p>Again, we'll go through the invocation, expansion and implementation
+for the macro.</p>
+
+<p>Let's recall the JavaScript for the invocation from the examples
+above:</p>
+
+<pre><code>var greeter = @iife(
+    return {
+        'hello': function(name) {
+            console.log('hello, '+ name);
+        }
+    };
+);
+</code></pre>
+
+<p>This is a 'body' macro - its only argument is a list of JavaScript
+statements. Let's tell Cheat-JS:</p>
+
+<pre><code>&gt; (cheat-js:register-body-macro "@iife")
+</code></pre>
+
+<p>We can now ask the parser for the invocation AST. We'll work with a
+simplified invocation, though - the example above will generate a
+large AST, and we can just as well manage with a smaller one. It's
+better if our invocation has more than one statement, so let's try
+this:</p>
+
+<pre><code>&gt; (cheat-js:parse-js "var a = @iife(alert(1);alert(2););")
+(:TOPLEVEL
+ ((:VAR
+   (("a" :MACRO-CALL (:NAME "@iife")
+     (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+            (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))))))
+</code></pre>
+
+<p>The expansion we desire for this invocation:</p>
+
+<pre><code>&gt; (cheat-js:parse-js "var a = (function() { alert(1); alert(2); })();")
+(:TOPLEVEL
+ ((:VAR
+   (("a" :CALL
+     (:FUNCTION NIL NIL
+      ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+       (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+     NIL)))))
+</code></pre>
+
+<p>OK. We need to expand:</p>
+
+<pre><code>(:MACRO-CALL (:NAME "@iife")
+  (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+         (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+</code></pre>
+
+<p>into:</p>
+
+<pre><code>(:CALL (:FUNCTION NIL NIL
+         ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+          (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+       NIL)
+</code></pre>
+
+<p>The function to do this is:</p>
+
+<pre><code>(defun iife-expander (invocation)
+  `(:CALL (:FUNCTION NIL NIL ,(rest (third invocation)))
+          NIL))
+</code></pre>
+
+<p>A quick test:</p>
+
+<pre><code>&gt; (let ((invocation '(:MACRO-CALL (:NAME "@iife")
+                      (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))))))
+       (iife-expander invocation))
+(:CALL
+ (:FUNCTION NIL NIL
+  ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+   (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+ NIL)
+</code></pre>
+
+<p>Looks OK. Let's install it:</p>
+
+<pre><code>&gt; (cheat-js:register-macro-expander "@iife" #'iife-expander)
+</code></pre>
+
+<p>Let's use it:</p>
+
+<pre><code>&gt; (cheat-js:explode "var a = @iife(alert(1);alert(2););")
+"var a = function() {
+    alert(1);
+    alert(2);
+}();"
+</code></pre>
+
+<p>Oops. Some parens got dropped. This is not really an issue, the
+resulting JavaScript is still valid. Let's try another example:</p>
+
+<pre><code>&gt; (cheat-js:explode "@iife(alert(1);alert(2););")
+"(function() {
+    alert(1);
+    alert(2);
+})();"
+</code></pre>
+
+<p>Good! The parens were required this time, and they are there.</p>
 
 <h3>Defining a safer <code>@defclass</code></h3>
 
@@ -346,14 +468,16 @@ ParenScript (mostly because you need to be a lisper to fully use
 Cheat-JS). I (Miron Brezuleanu) wrote a few thousands of lines of
 ParenScript code and found that there is some 'impedance mismatch'
 between ParenScript and JavaScript (especially around the '.' operator
-in JavaScript and modules in JavaScript). I found it harder to write
-code in ParenScript than in JavaScript, and the presence of macros
-didn't compensate for this extra effort. I tried to find a way to have
-macros while writing something closer to JavaScript. Cheat-JS is what
-I came up with.</p>
+in JavaScript and modules in JavaScript). This was most likely my
+fault: instead of writing Lisp to be compiled to JavaScript, I was
+trying to write JavaScript with s-expressions. I found it harder to
+write code in ParenScript than in JavaScript, and the presence of
+macros didn't compensate for this extra effort. I tried to find a way
+to have macros while writing something closer to JavaScript. Cheat-JS
+is what I came up with.</p>
 
 <p>Thanks for taking the time to read about Cheat-JS; I hope you'll find
-it useful!</p>
+it useful (or at least amusing - or both)!</p>
 
 <p>Please use the Github
 <a href="https://github.com/mbrezu/cheat-js/issues">issues page</a> to report any

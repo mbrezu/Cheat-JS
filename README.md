@@ -39,6 +39,19 @@ is define transformations to be applied on the output of
 `parse-js`. This is what Cheat-JS does: get the `parse-js` AST, apply
 the transformations, convert back to JavaScript code.
 
+The idea is rather obvious - the main reason Cheat-JS exists is that I
+could not find something similar on the net. There are probably many
+people who privately do similar things with tools like `parse-js` and
+the pretty-printer part of `cl-uglify-js` - that, or my Google skills
+failed me :)
+
+## BIG WARNING
+
+I haven't used Cheat-JS on any large projects. I don't have enough
+imagination to compensate for this lack of experience, so it may have
+a lot of problems I haven't thought about. Right now it's just a proof
+of concept.
+
 ## Some simple examples
 
 Instead of writing:
@@ -144,16 +157,19 @@ Running the tests with:
 
     (cheat-js:run-tests)
 
-should give you some confidence that things are not obviously broken
-(They are most likely broken, but in subtle ways).
+gives some confidence that things are not obviously broken (they are
+most likely broken, but in ways that are subtle enough to fool the
+tests).
 
-The next section should provide you with some pointers on how to
-define your Cheat-JS macros.
+The next section will provide you with some pointers on how to define
+your Cheat-JS macros. If you run into problems, look at the
+`tests.lisp` file for example code - the code there matches the text
+in the next section.
 
 ## Your first Cheat-JS macros
 
-Before running `cheat-js:macroexpand-all` on your JavaScript source
-code, you need to install your macros.
+Before running `cheat-js:explode` on your JavaScript source code, you
+need to install your macros.
 
 First reset the list of installed macros,
 
@@ -163,7 +179,7 @@ To define a macro, you need to know three things:
 
  * how the macro invocation call looks like (what you want to write in
    the JavaScript source code); this is the macro's "API"; it is
-   JavaScript code (or almost) and the parsed AST;
+   JavaScript code (or almost) and the parsed AST for that code;
  * how the macro expansion looks like; this is the macro's "result";
    it is an AST tree;
  * how to transform the AST of the invocation into the AST of the
@@ -171,7 +187,7 @@ To define a macro, you need to know three things:
    Lisp.
 
 Let's define `@defclass`.
-  
+
 ### Defining `@defclass`
 
 We need to see how the macro invocation looks like in JavaScript:
@@ -266,7 +282,7 @@ Looks OK. Let's tell Cheat-JS about our function:
 
 Now we can ask Cheat-JS to macroexpand our code:
 
-    > (cheat-js:macroexpand-all "var Person = @defclass(name, shoeSize);")
+    > (cheat-js:explode "var Person = @defclass(name, shoeSize);")
     "var Person = function(name, shoeSize)
     {
         this.name = name;
@@ -278,6 +294,102 @@ Now we can ask Cheat-JS to macroexpand our code:
 On to `@iife`.
 
 ### Defining `@iife`
+
+Again, we'll go through the invocation, expansion and implementation
+for the macro.
+
+Let's recall the JavaScript for the invocation from the examples
+above:
+
+    var greeter = @iife(
+        return {
+            'hello': function(name) {
+                console.log('hello, '+ name);
+            }
+        };
+    );
+
+This is a 'body' macro - its only argument is a list of JavaScript
+statements. Let's tell Cheat-JS:
+
+    > (cheat-js:register-body-macro "@iife")
+
+We can now ask the parser for the invocation AST. We'll work with a
+simplified invocation, though - the example above will generate a
+large AST, and we can just as well manage with a smaller one. It's
+better if our invocation has more than one statement, so let's try
+this:
+
+    > (cheat-js:parse-js "var a = @iife(alert(1);alert(2););")
+    (:TOPLEVEL
+     ((:VAR
+       (("a" :MACRO-CALL (:NAME "@iife")
+         (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+                (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))))))
+
+The expansion we desire for this invocation:
+
+    > (cheat-js:parse-js "var a = (function() { alert(1); alert(2); })();")
+    (:TOPLEVEL
+     ((:VAR
+       (("a" :CALL
+         (:FUNCTION NIL NIL
+          ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+           (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+         NIL)))))
+
+OK. We need to expand:
+
+    (:MACRO-CALL (:NAME "@iife")
+      (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+             (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+
+into:
+
+    (:CALL (:FUNCTION NIL NIL
+             ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+              (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+           NIL)
+
+The function to do this is:
+
+    (defun iife-expander (invocation)
+      `(:CALL (:FUNCTION NIL NIL ,(rest (third invocation)))
+              NIL))
+
+A quick test:
+
+    > (let ((invocation '(:MACRO-CALL (:NAME "@iife")
+                          (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))))))
+           (iife-expander invocation))
+    (:CALL
+     (:FUNCTION NIL NIL
+      ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+       (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+     NIL)
+
+Looks OK. Let's install it:
+
+    > (cheat-js:register-macro-expander "@iife" #'iife-expander)
+
+Let's use it:
+
+    > (cheat-js:explode "var a = @iife(alert(1);alert(2););")
+    "var a = function() {
+        alert(1);
+        alert(2);
+    }();"
+    
+Oops. Some parens got dropped. This is not really an issue, the
+resulting JavaScript is still valid. Let's try another example:
+
+    > (cheat-js:explode "@iife(alert(1);alert(2););")
+    "(function() {
+        alert(1);
+        alert(2);
+    })();"
+    
+Good! The parens were required this time, and they are there.
 
 ### Defining a safer `@defclass`
 
