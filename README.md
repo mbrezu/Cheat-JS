@@ -3,7 +3,8 @@
 
 ## Important Note
 
-Cheat-JS includes a modified version of `parse-js`, written by Marijn
+Cheat-JS includes a modified version of
+[`parse-js`](http://marijnhaverbeke.nl/parse-js/), written by Marijn
 Haverbeke. This is necessary because I (Miron Brezuleanu) needed to
 modify `parse-js` a little. The license of `parse-js` is in the
 `LICENSE-parse-js.txt` file. The modified files from `parse-js`
@@ -11,13 +12,17 @@ included in Cheat-JS are `parse.lisp`, `tokenize.lisp` and
 `util.lisp`. The modifications were permitted by the `parse-js`
 license. This is not an official copy of `parse-js` and is not
 supported by Marijn Haverbeke. If the modified parsing code in
-Cheat-JS breaks, it's exclusively Miron Brezuleanu's fault, because he
-messed up the code.
+Cheat-JS breaks, it's exclusively my fault - I messed up the code.
+
+Cheat-JS also uses
+[`cl-uglify-js`](https://github.com/mishoo/cl-uglify-js) unmodified,
+via [Quicklisp](http://www.quicklisp.org/). These two libraries do
+most of the work, Cheat-JS is mostly 'glue code'.
 
 ## About Cheat-JS
 
-Lisp macros are powerful and easy to implement (not so easy to use...)
-because Lisp programs are made of s-expressions.
+Lisp macros are powerful and easy to implement because Lisp programs
+are made of s-expressions.
 
 Lisp-style macros are difficult to add to other languages because most
 languages have very non-uniform syntax compared to Lisp. Source
@@ -26,17 +31,15 @@ JavaScript, if it were possible to convert the JavaScript code into
 s-expressions, transform it, and convert it back into JavaScript code.
 
 Turns out that we can transform JavaScript code into an AST made of
-s-expressions using
-[`parse-js`](http://marijnhaverbeke.nl/parse-js/). Converting back
-into JavaScript code can be done with
-[`cl-uglify-js`](https://github.com/mishoo/cl-uglify-js) (ironically,
+s-expressions using `parse-js`. Converting back into JavaScript code
+can be done with `cl-uglify-js` (ironically,
 `cl-uglify-js:ast-gen-code` is a capable pretty printer). All that
 remains to be done to have macros (well, defined in another language)
 is define transformations to be applied on the output of
 `parse-js`. This is what Cheat-JS does: get the `parse-js` AST, apply
 the transformations, convert back to JavaScript code.
 
-## A couple of simple examples
+## Some simple examples
 
 Instead of writing:
 
@@ -55,7 +58,7 @@ expand something like `@defclass(Person, name, shoeSize);` into
 shoeSize; };`).
 
 This assumes that we have defined a `@defclass` macro which does the
-above expansions.
+above expansion - we'll define two such macros in this document.
 
 One of the `parse-js` modifications necessary for this to work is
 allow `@` as a character in identifiers (the recommended convention
@@ -97,14 +100,16 @@ Instead of writing:
     (function () {
         var test = someTest();
         if (test) {
-            console.log("yes!");
+            console.log("Yes!");
+            console.log("We passed the test!");
         }
     })();
 
 Cheat-JS makes it possible to write:
 
     @when-let(test, someTest();
-        console.log("yes!");
+        console.log("Yes!");
+        console.log("We passed the test!");
     );
 
 This macro is similar to
@@ -116,18 +121,20 @@ separate the expressions and the statements with a semicolon, as in
 the example above.
 
 It is of course possible to define the anaphoric version of
-`@when-let`, `@awhen`.
+`@when-let`, `@awhen` (from
+[OnLisp](http://paulgraham.com/onlisp.html), page 190).
 
-`@iife`, `@defclass` (and even a safer version of `@defclass`),
-`@when-let` and `@awhen` will be defined in this document (the guide
-on how to write Cheat-JS macros is based on these macros).
+The guide on how to write Cheat-JS macros is based on defining
+`@defclass` (and even a safer version of `@defclass`), `@iife`,
+`@when-let` and `@awhen`. So all potential misteries introduced by
+this section will be cleared by the end of this document.
 
 ## Getting started
 
 You can get Cheat-JS at `http://github.com/mbrezu/cheat-js`. It's
 probably best to `git clone` it inside the `local-projects` directory
-of your [Quicklisp](http://www.quicklisp.org/) install, so you can
-load it with `(ql:quickload :cheat-js)` in your REPL.
+of your Quicklisp install, so you can load it with `(ql:quickload
+:cheat-js)` in your REPL.
 
 Note: I've only tested it with SBCL, so I recommend you use SBCL
 too. It should work with other CL implementations, though (all the
@@ -269,3 +276,66 @@ Now we can ask Cheat-JS to macroexpand our code:
 
 `cl-uglify-js` is a really good pretty printer, isn't it?
 
+On to `@iife`.
+
+### Defining `@iife`
+
+### Defining a safer `@defclass`
+
+### Defining `@when-let`
+
+### Defining `@awhen`
+
+## Closing thoughts
+
+Still reading? Wow!
+
+One thing is obvious: Cheat-JS makes it possible to write macro-like
+transformations on JavaScript code, but it's not nearly as easy as
+writing Common Lisp macros. Maybe this isn't a bad thing - we should
+be writing macros only when there's no other way to avoid code
+duplication.
+
+There are plenty of quirks. There's only so many transformations you
+can do (function calls are not as frequent in JavaScript as they are
+in Common Lisp, and macro invocations are 'hooked' to function
+calls). Maybe `parse-js` could be tweaked harder to make it possible
+to insert macros at other points. For now, the transformations
+possible with 'function call' macros are enough for me.
+
+You need to be able to 'pattern match' ASTs and figure out how to
+transform macro invocations ASTs into macro expansions ASTs. This is a
+basic macro writing skill, but with an indirection (in Common Lisp the
+source code is the AST, not so with JavaScript).
+
+You also need to know Common Lisp. In theory, a Cheat-JS based
+preprocessor could be distributed and used by people who are only
+'consuming' macros produced by someone else (a 'macro
+producer'). Hmmm, people will certainly be amused if a 'macro
+producer' starts distributing a 40MB executable (this is about the
+minimum size for SBCL standalone executables) that just
+explodes some constructs in the source code :-)
+
+With a JavaScript parser written in JavaScript it would be possible to
+do what Cheat-JS does without Common Lisp (though without backquotes
+the generation of macro expansions is probably a pain, and the AST
+would have to be uniform - nested arrays, no classes, maybe? - to make
+it easier to 'pattern match' and analyze).
+
+Right now, the audience of Cheat-JS is probably the audience of
+ParenScript (mostly because you need to be a lisper to fully use
+Cheat-JS). I (Miron Brezuleanu) wrote a few thousands of lines of
+ParenScript code and found that there is some 'impedance mismatch'
+between ParenScript and JavaScript (especially around the '.' operator
+in JavaScript and modules in JavaScript). I found it harder to write
+code in ParenScript than in JavaScript, and the presence of macros
+didn't compensate for this extra effort. I tried to find a way to have
+macros while writing something closer to JavaScript. Cheat-JS is what
+I came up with.
+
+Thanks for taking the time to read about Cheat-JS; I hope you'll find
+it useful!
+
+Please use the Github
+[issues page](https://github.com/mbrezu/cheat-js/issues) to report any
+bugs or to post feature requests.
