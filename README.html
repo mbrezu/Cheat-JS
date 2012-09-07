@@ -1,0 +1,58 @@
+<h1>Cheat-JS - macro for JavaScript. Kinda.</h1>
+
+<h2>Important Note</h2>
+
+<p>Cheat-JS includes a modified version of <code>parse-js</code>, written by Marijn
+Haverbeke. This is necessary because I (Miron Brezuleanu) needed to
+modify <code>parse-js</code> a little. The license of <code>parse-js</code> is in the
+<code>LICENSE-parse-js.txt</code> file. The modified files from <code>parse-js</code>
+included in Cheat-JS are <code>parse.lisp</code>, <code>tokenize.lisp</code> and
+<code>util.lisp</code>. The modifications were permitted by the <code>parse-js</code>
+license. This is not an official copy of <code>parse-js</code> and is not
+supported by Marijn Haverbeke. If the modified parsing code in
+Cheat-JS breaks, it's exclusively Miron Brezuleanu's fault, because he
+messed up the code.</p>
+
+<h2>About Cheat-JS</h2>
+
+<p>Cheat-JS is a JavaScript preprocessor that permits applying AST
+transformations on JavaScript source. The AST transformations (macros)
+are written in Common Lisp. Instead of writing:</p>
+
+<pre><code>var greeter = (function () {
+    return { 
+        'hello': function(name) {
+            console.log('hello, '+ name);
+        };
+    };
+}());
+</code></pre>
+
+<p>Cheat-JS makes it possible to write:</p>
+
+<pre><code>var greeter = @iife(
+    return {
+        'hello': function(name) {
+            console.log('hello, '+ name);            
+        }
+    };
+);
+</code></pre>
+
+<p>Instead of writing:</p>
+
+<pre><code>function Person(name, shoeSize) {
+    this.name = name;
+    this.shoeSize = shoeSize;
+}
+</code></pre>
+
+<p>Cheat-JS makes it possible to write:</p>
+
+<pre><code>@defclass(Person, name, shoeSize)
+</code></pre>
+
+<p>(assuming that <code>@iife</code> and <code>@defclass</code> were defined as AST
+transformations in Common Lisp code).</p>
+
+<h2>Getting started</h2>
