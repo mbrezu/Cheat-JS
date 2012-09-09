@@ -157,3 +157,21 @@
         f(t1, t2, t3);
     }
 })(1, 2, 3);"))))
+
+(defun awhen-expander (args body)
+  `(:MACRO-CALL (:NAME "@whenLet")
+                ((:ARGS (:NAME "it") ,(first args))
+                 (:BODY ,@body))))
+
+(test awhen
+  (cheat-js:clear-macros)
+  (cheat-js:register-args-and-body-macro "@whenLet")
+  (cheat-js:register-macro-expander "@whenLet" #'when-let-expander)
+  (cheat-js:register-args-and-body-macro "@awhen")
+  (cheat-js:register-macro-expander "@awhen" #'awhen-expander)
+  (is (equal (cheat-js:explode "@awhen(expr;f(expr););")
+             "(function(it) {
+    if (it) {
+        f(expr);
+    }
+})(expr);")))

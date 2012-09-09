@@ -1,6 +1,6 @@
 <h1>Cheat-JS - macros for JavaScript. Kinda.</h1>
 
-<p>This document assumes you know Commmon Lisp and JavaScript.</p>
+<p>This document assumes you already know Commmon Lisp and JavaScript.</p>
 
 <h2>About Cheat-JS</h2>
 
@@ -142,7 +142,7 @@ the example above.</p>
 
 <p>It is of course possible to define the anaphoric version of
 <code>@whenLet</code>, <code>@awhen</code> (from
-<a href="http://paulgraham.com/onlisp.html">OnLisp</a>, page 190).</p>
+<a href="http://paulgraham.com/onlisp.html">On Lisp</a>, page 190).</p>
 
 <p>The guide on how to write Cheat-JS macros (below in this document) is
 based on defining <code>@defclass</code> (and even a safer version of
@@ -175,10 +175,10 @@ in the next section.</p>
 
 <h2>Your first Cheat-JS macros</h2>
 
-<p>Before running <code>cheat-js:explode</code> on your JavaScript source code, you
-need to install your macros.</p>
+<p>Before running the macroexpansion function <code>cheat-js:explode</code> on your
+JavaScript source code, you need to install your macros.</p>
 
-<p>First reset the list of installed macros,</p>
+<p>First reset the list of installed macros:</p>
 
 <pre><code>&gt; (cheat-js:clear-macros)
 </code></pre>
@@ -188,9 +188,9 @@ need to install your macros.</p>
 <ul>
 <li>how the macro invocation call looks like (what you want to write in
 the JavaScript source code); this is the macro's "API"; it is
-JavaScript code (or almost) and the parsed AST for that code;</li>
-<li>how the macro expansion looks like; this is the macro's "result";
-it is an AST tree;</li>
+JavaScript code (or almost);</li>
+<li>how the macro expansion looks like in JavaScript; this is the
+macro's "result";</li>
 <li>how to transform the AST of the invocation into the AST of the
 expansion; this is the macro's "implementation", written in Common
 Lisp.</li>
@@ -500,13 +500,11 @@ opportunity, let's not waste it. The expansion is:</p>
 );
 </code></pre>
 
-<p>Let's make sure Cheat-JS knows what kind of macro <code>@iife</code> is (just in
-case we restarted the REPL since we last defined <code>@iife</code>):</p>
+<p>If your REPL was restarted after defining <code>@iife</code>, please reinstall
+<code>@iife</code> in the new REPL by using the instructions in the last section
+(or the code in <code>tests.lisp</code>).</p>
 
-<pre><code>&gt; (cheat-js:register-body-macro "@iife")
-</code></pre>
-
-<p>Now we can ask <code>cheat-js</code> about AST of the expansion:</p>
+<p>Now we can ask <code>cheat-js</code> about the AST of the expansion:</p>
 
 <pre><code>&gt; (cheat-js:parse-js "var Person = @iife(
                           function Person(name, shoeSize) {
@@ -629,7 +627,7 @@ variable in the 'let' part. Let's use this invocation:</p>
 </code></pre>
 
 <p>This is an 'args and body' macro (the <code>test1, 1, test2, 2, test3, 3</code>
-is the 'args' part, <code>f(t1, t2, t3);</code> is the body. They are separated
+is the 'args' part, <code>f(t1, t2, t3);</code> is the body). They are separated
 by a semicolon. Let's tell CheatJS about this macro:</p>
 
 <pre><code>&gt; (cheat-js:register-args-and-body-macro "@whenLet")
@@ -665,10 +663,10 @@ our variables, so this is a suitable expansion:</p>
 <p>The AST of the expansion:</p>
 
 <pre><code>&gt;(cheat-js:parse-js "(function(t1, t2, t3) {
-             if (t1 &amp;&amp; t2 &amp;&amp; t3) {
-                 f(t1, t2, t3);
-             }
-         })(1, 2, 3);")
+                         if (t1 &amp;&amp; t2 &amp;&amp; t3) {
+                             f(t1, t2, t3);
+                         }
+                     })(1, 2, 3);")
 (:TOPLEVEL
  ((:STAT
    (:CALL
@@ -767,7 +765,7 @@ opening paren) necessary in the last <code>@let</code> invocation?</li>
 
 <h3>Defining <code>@awhen</code></h3>
 
-<p>... should be very easy. <code>awhen</code>, defined in <em>OnLisp</em>, page 190, is
+<p>... should be very easy. <code>awhen</code>, defined in <em>On Lisp</em>, page 190, is
 just <code>when-let</code> with one anaphoric variable, <code>it</code>. So the invocation:</p>
 
 <pre><code>@awhen(expr;f(it);)
@@ -777,6 +775,69 @@ just <code>when-let</code> with one anaphoric variable, <code>it</code>. So the 
 
 <pre><code>@whenLet(it, expr;f(it);)
 </code></pre>
+
+<p>Let's declare <code>@awhen</code> to be an 'args and body' macro:</p>
+
+<pre><code>&gt; (cheat-js:register-args-and-body-macro "@awhen")
+</code></pre>
+
+<p>If you have restarted your REPL after reading the last section, please
+make sure to redefine <code>@whenLet</code> in your new REPL.</p>
+
+<p>The AST of the invocation:</p>
+
+<pre><code>&gt; (cheat-js:parse-js "@awhen(expr;f(it);)")
+(:TOPLEVEL
+ ((:STAT
+   (:MACRO-CALL (:NAME "@awhen")
+    ((:ARGS (:NAME "expr"))
+     (:BODY (:STAT (:CALL (:NAME "f") ((:NAME "it"))))))))))
+</code></pre>
+
+<p>The AST of the expansion:</p>
+
+<pre><code>&gt; (cheat-js:parse-js "@whenLet(it, expr;f(it);)")
+(:TOPLEVEL
+ ((:STAT
+   (:MACRO-CALL (:NAME "@whenLet")
+    ((:ARGS (:NAME "it") (:NAME "expr"))
+     (:BODY (:STAT (:CALL (:NAME "f") ((:NAME "it"))))))))))
+</code></pre>
+
+<p>The expander:</p>
+
+<pre><code>(defun awhen-expander (args body)
+  `(:MACRO-CALL (:NAME "@whenLet")
+                ((:ARGS (:NAME "it") ,(first args))
+                 (:BODY ,@body))))
+</code></pre>
+
+<p>Let's install the expander and test <code>@awhen</code>:</p>
+
+<pre><code>&gt; (cheat-js:register-macro-expander "@awhen" #'awhen-expander)
+&gt; (cheat-js:explode "@awhen(expr;f(expr););")
+"(function(it) {
+    if (it) {
+        f(expr);
+    }
+})(expr);"
+</code></pre>
+
+<p>It works!</p>
+
+<h3>Conclusion</h3>
+
+<p>To define a CheatJS macro, you need to know the three things required
+for any macro: the invocation, the expansion, the transformation. </p>
+
+<p>You also need to call one of the <code>cheat-js:register-*-macro</code> functions
+to declare the type of your macro and
+<code>cheat-js:register-macro-expander</code> to install the expander
+function. It's best to call <code>cheat-js:clear-macros</code> before your macro
+definitions to start clean.</p>
+
+<p>Use <code>cheat-js:explode</code> to macroexpand JavaScript code after you
+defined the macros.</p>
 
 <h2>Troubleshooting</h2>
 
@@ -788,7 +849,7 @@ a macro invocation fails; I'll try to improve error handling there.</p>
 incorrect? etc.). The examples above should provide some information
 about how Cheat-JS works. Reading <code>cheat-js.lisp</code> (rather small right
 now, less than a hundred lines) and the <code>tests.lisp</code> files may provide
-some clues about what Cheat-JS expects from a macro definition.</p>
+more clues about what Cheat-JS expects from a macro definition.</p>
 
 <h2>Closing thoughts</h2>
 
