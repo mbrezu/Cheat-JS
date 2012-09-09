@@ -74,10 +74,10 @@ This assumes that we have defined a `@defclass` macro which does the
 above expansion - we'll define two such macros in this document.
 
 One of the `parse-js` modifications necessary for this to work is
-allow `@` as a character in identifiers (the recommended convention
-for naming macros is `@` followed by the macro name). Currently macro
-names can't be nested (i.e. `some.namespace.@iife` is not valid
-syntax).
+allow `@` as a character in identifiers (the Cheat-JS recommended
+convention for naming macros is `@` followed by the macro
+name). Currently macro names can't be nested
+(i.e. `some.namespace.@iife` is not valid syntax).
 
 Instead of writing:
 
@@ -111,24 +111,24 @@ statements instead of a list of parameters (see the invocation of
 Instead of writing:
 
     (function () {
-        var test = someTest();
-        if (test) {
+        var testResult = someTest();
+        if (testResult) {
             console.log("Yes!");
-            console.log("We passed the test!");
+            console.log("We passed the test with result ", testResult, ".");
         }
     })();
 
 Cheat-JS makes it possible to write:
 
-    @whenLet(test, someTest();
+    @whenLet(testResult, someTest();
         console.log("Yes!");
-        console.log("We passed the test!");
+        console.log("We passed the test with result ", testResult, ".");
     );
 
 This macro is similar to
 [`alexandria:when-let`](http://common-lisp.net/project/alexandria/draft/alexandria.html#Data-and-Control-Flow). `@whenLet`
 has the most complicated interface possible for a Cheat-JS macro: its
-argument list has both expressions (`test`, `someTest()`) and
+argument list has both expressions (`testResult`, `someTest()`) and
 statements (the `console.log` call). When invoking such macros,
 separate the expressions and the statements with a semicolon, as in
 the example above.
@@ -245,7 +245,7 @@ into this:
     (:FUNCTION NIL ("name" "shoeSize")
      ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
       (:STAT (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
-      
+
 We only need the macro arguments to perform the expansion. Since we
 told Cheat-JS this is an 'args only' macro, it knows we're only
 interested in the arguments (not the entire `:MACRO-CALL` tree), so
@@ -260,7 +260,7 @@ that's what it will pass to our expander function:
                                             (:dot (:name "this") ,name)
                                             (:name ,name))))
                                names))))
-                               
+
 The parameter `args` contains the list of arguments extracted from
 `(:ARGS...` above (in our case `((:NAME "name") (:NAME
 "shoeSize"))`). The value returned by the function should be the
@@ -355,7 +355,7 @@ The function to do this is:
     (defun iife-expander (body)
       `(:CALL (:FUNCTION NIL NIL ,body)
               NIL))
-              
+
 Since we told Cheat-JS this is a 'body only' macro, it extracts the
 body from the `:MACRO-CALL` AST and passes it to our expander.
 
@@ -408,11 +408,10 @@ We used the following Javascript 'class definition' for the
     };
 
 This code has a well-known problem. To create a `Person` object, one
-should use a call like `new Person('John', 42);` (John's shoe size is
-the answer to everything but John is rather boring). If we forget the
-`new`, we are in trouble, because `this` inside the function no longer
-refers to a newly created object, but to `window`, the global
-object. John's marvelous shoe size ends up in the global scope.
+should use a call like `new Person('John', 42);`. If we forget the
+`new` keyword, we are in trouble, because `this` inside the function
+no longer refers to a newly created object, but to `window`, the
+global object.
 
 Isn't there a way around this? Let's try to define `Person` like this:
 
@@ -433,13 +432,21 @@ verbose, though. Maybe we can use... a macro?
 Let's examine the three pieces of data we need for a new macro. The
 invocation in JavaScript:
 
-    var Person = @defclass(Person, name, shoeSize);
+    var Person = @safeDefclass(Person, name, shoeSize);
 
 This is certainly more like it, conciseness-wise.
 
-Our new `@defclass`, like the old one, is an 'args only` macro:
+`@safeDefclass`, like `@defclass`, is an 'args only` macro:
 
-    > (cheat-js:register-args-macro "@defclass")
+    > (cheat-js:register-args-macro "@safeDefclass")
+
+The AST of the invocation:
+
+    > (cheat-js:parse-js "var Person = @safeDefclass(Person, name, shoeSize);")
+    (:TOPLEVEL
+     ((:VAR
+       (("Person" :MACRO-CALL (:NAME "@safeDefclass")
+         (:ARGS (:NAME "Person") (:NAME "name") (:NAME "shoeSize")))))))
 
 What about the expansion? Do we want the expansion shown above, or is
 it possible to expand to something shorter? This is a macro-combining
@@ -454,15 +461,6 @@ opportunity, let's not waste it. The expansion is:
             return new Person(name, shoeSize);
         };
     );
-
-The AST of the invocation:
-
-    > (cheat-js:parse-js "var Person = @defclass(Person, name, shoeSize);")
-    (:TOPLEVEL
-     ((:VAR
-       (("Person" :MACRO-CALL (:NAME "@defclass")
-         (:ARGS
-          (:SEQ (:NAME "Person") (:SEQ (:NAME "name") (:NAME "shoeSize")))))))))
 
 Let's make sure Cheat-JS knows what kind of macro `@iife` is (just in
 case we restarted the REPL since we last defined `@iife`):
@@ -500,11 +498,8 @@ be able to handle this, like a good little macroexpander.
 To make writing the expansion function easier, let's isolate the
 source and target ASTs. The invocation:
 
-    (:MACRO-CALL (:NAME "@defclass")
-               (:ARGS
-                (:SEQ (:NAME "Person")
-                 (:SEQ (:NAME "name")
-                       (:NAME "shoeSize")))))
+    (:MACRO-CALL (:NAME "@safeDefclass")
+     (:ARGS (:NAME "Person") (:NAME "name") (:NAME "shoeSize")))
 
 and our desired expansion:
 
@@ -519,12 +514,81 @@ and our desired expansion:
         ((:RETURN (:NEW (:NAME "Person") ((:NAME "name")
                                           (:NAME "shoeSize")))))))))
 
-Wow. This time we generate more code. In order to have macros over
-ASTs of manageable dimensions, we'd better combine them.
+The expander function:
+
+    (defun safe-defclass-expander (args)
+      (let* ((names (mapcar #'second args))
+             (class-name (first names))
+             (field-names (rest names)))
+        `(:MACRO-CALL
+          (:NAME "@iife")
+          (:BODY
+           (:DEFUN ,class-name ,field-names
+             ,(mapcar (lambda (field)
+                        `(:STAT (:ASSIGN T
+                                         (:DOT (:NAME "this") ,field)
+                                         (:NAME ,field))))
+                      field-names))
+           (:BLOCK NIL)
+           (:RETURN
+             (:FUNCTION NIL ,field-names
+                        ((:RETURN (:NEW (:NAME ,class-name)
+                                        ,(mapcar (lambda (field)
+                                                   (list :name field))
+                                                 field-names))))))))))
+
+Test the expander function:
+
+    > (let* ((args '((:NAME "Person")
+                     (:NAME "name")
+                     (:NAME "shoeSize"))))
+        (safe-defclass-expander args))
+    (:MACRO-CALL (:NAME "@iife")
+     (:BODY
+      (:DEFUN "Person" ("name" "shoeSize")
+       ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name")
+                        (:NAME "name")))
+        (:STAT (:ASSIGN T (:DOT (:NAME "this") "shoeSize")
+                        (:NAME "shoeSize")))))
+      (:BLOCK NIL)
+      (:RETURN
+       (:FUNCTION NIL ("name" "shoeSize")
+        ((:RETURN (:NEW (:NAME "Person") ((:NAME "name")
+                                          (:NAME "shoeSize")))))))))
+
+It seems to do what we want. Let's install and test it:
+
+    > (cheat-js:register-macro-expander "@safeDefclass"
+                                        #'safe-defclass-expander)
+    > (cheat-js:explode "var Person = @safeDefclass(Person, name, shoeSize);")
+    "var Person = function() {
+        function Person(name, shoeSize) {
+            this.name = name;
+            this.shoeSize = shoeSize;
+        }
+        return function(name, shoeSize) {
+            return new Person(name, shoeSize);
+        };
+    }();"
+    
+So composing macros (`@safeDefclass` expands into a call to `@iife`)
+works.
 
 ### Defining `@whenLet`
 
 ### Defining `@awhen`
+
+## Troubleshooting
+
+Right now Cheat-JS doesn't give very nice error messages when parsing
+a macro invocation fails; I'll try to improve error handling there.
+
+If things break, right now the best course is to isolate the problem
+(it's a problem in the expander? is the expected AST for the expansion
+incorrect? etc.). The examples above should provide some information
+about how Cheat-JS works. Reading `cheat-js.lisp` (rather small right
+now, less than a hundred lines) and the `tests.lisp` files may provide
+some clues about what Cheat-JS expects from a macro definition.
 
 ## Closing thoughts
 
@@ -553,8 +617,8 @@ preprocessor could be distributed and used by people who are only
 'consuming' macros produced by someone else (a 'macro
 producer'). Hmmm, people will certainly be amused if a 'macro
 producer' starts distributing a 40MB executable (this is about the
-minimum size for SBCL standalone executables) that just
-explodes some constructs in the source code :-)
+minimum size for SBCL standalone executables) that explodes constructs
+in the source code into larger code :-)
 
 With a JavaScript parser written in JavaScript it would be possible to
 do what Cheat-JS does without Common Lisp (though without backquotes
