@@ -50,6 +50,15 @@
         (parse-js:*allow-at-signs* t))
     (parse-js:parse-js js-string)))
 
+(defun expand-macro (macro-record ast)
+  (ecase (macro-record-kind macro-record)
+    ((:args) (funcall (macro-record-expander macro-record) (rest (third ast))))
+    ((:body) (funcall (macro-record-expander macro-record) (rest (third ast))))
+    ((:args-and-body)
+     (funcall (macro-record-expander macro-record)
+              (rest (first (third ast)))
+              (rest (second (third ast)))))))
+
 (defun macroexpand-all (ast)
   (cond ((listp ast)
          (cond ((eq :var (first ast))
@@ -70,9 +79,8 @@
                               nil
                               "Cheat-JS: no expander defined for macro \"~a\"."
                               macro-name)))
-                    (macroexpand-all
-                     (funcall (macro-record-expander macro-record)
-                              ast)))))
+                    (let ((expansion (expand-macro macro-record ast)))
+                      (macroexpand-all expansion)))))
                (t (mapcar #'macroexpand-all ast))))
         (t ast)))
 
