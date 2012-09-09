@@ -217,16 +217,17 @@ expected if we don't call <code>register-args-macro</code> as above, so don't
 skip that step):</p>
 
 <pre><code>&gt; (cheat-js:parse-js "var Person = @defclass(name, shoeSize);")
-
 (:TOPLEVEL
  ((:VAR
    (("Person" :MACRO-CALL (:NAME "@defclass")
-     (:ARGS (:SEQ (:NAME "name") (:NAME "shoeSize"))))))))
+     (:ARGS (:NAME "name") (:NAME "shoeSize")))))))
 </code></pre>
 
 <p>The part that starts with <code>:MACRO-CALL</code> is the interesting part; this
 is the AST representation of our macro invocation; this is what we
-need to transform into the expansion.</p>
+need to transform into the expansion (don't worry about the apparently
+missing <code>(</code> in front of <code>:MACRO-CALL</code> above, it's because the list
+following <code>:VAR</code> is made of conses, not lists).</p>
 
 <p>What does the expansion look like? Let's see:</p>
 
@@ -245,14 +246,12 @@ need to transform into the expansion.</p>
 </code></pre>
 
 <p>Comparing the two ASTs reveals that we need to transform the
-<code>(:MACRO-CALL</code> s-expression into the <code>(:FUNCTION</code> s-expression (don't
-worry about the apparently missing <code>(</code> in front of <code>:FUNCTION</code> above,
-it's because the list following <code>:VAR</code> is made of conses, not lists).</p>
+<code>(:MACRO-CALL</code> s-expression into the <code>(:FUNCTION</code> s-expression.</p>
 
-<p>To make it clearer, we need to write a lisp function to transform this:</p>
+<p>To make it clearer, we need to write a Common Lisp function to transform this:</p>
 
 <pre><code>(:MACRO-CALL (:NAME "@defclass")
- (:ARGS (:SEQ (:NAME "name") (:NAME "shoeSize"))))
+ (:ARGS (:NAME "name") (:NAME "shoeSize")))
 </code></pre>
 
 <p>into this:</p>
@@ -262,11 +261,13 @@ it's because the list following <code>:VAR</code> is made of conses, not lists).
   (:STAT (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
 </code></pre>
 
-<p>This part is easy. Just like writing CL macros :-)</p>
+<p>We only need the macro arguments to perform the expansion. Since we
+told Cheat-JS this is an 'args only' macro, it knows we're only
+interested in the arguments (not the entire <code>:MACRO-CALL</code> tree), so
+that's what it will pass to our expander function:</p>
 
-<pre><code>&gt; (defun defclass-expander (invocation)
-    (let* ((raw-names (cdr (second (third invocation))))
-           (names (mapcar #'second raw-names)))
+<pre><code>&gt; (defun defclass-expander (args)
+    (let* ((names (mapcar #'second args)))
       `(:function nil ,names
                   ,(mapcar (lambda (name)
                              `(:stat
@@ -276,20 +277,20 @@ it's because the list following <code>:VAR</code> is made of conses, not lists).
                            names))))
 </code></pre>
 
-<p>The parameter <code>invocation</code> is the s-expression starting with
-<code>(:MACRO-CALL...</code> above. The value returned by the function should be
-the expansion show above (s-expression starting with <code>(:FUNCTION...</code>).</p>
+<p>The parameter <code>args</code> contains the list of arguments extracted from
+<code>(:ARGS...</code> above (in our case <code>((:NAME "name") (:NAME
+"shoeSize"))</code>). The value returned by the function should be the
+expansion shown above (s-expression starting with <code>(:FUNCTION...</code>).</p>
 
 <p>Let's test it:</p>
 
-<pre><code>&gt; (let ((invocation '(:MACRO-CALL
-                      (:NAME "@defclass")
-                      (:ARGS (:SEQ (:NAME "name") (:NAME "shoeSize"))))))
-    (defclass-expander invocation))
+<pre><code>&gt; (let ((args '((:NAME "name") (:NAME "shoeSize"))))
+    (defclass-expander args))
 (:FUNCTION NIL ("name" "shoeSize")
- ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
-  (:STAT
-   (:ASSIGN T (:DOT (:NAME "this") "shoeSize") (:NAME "shoeSize")))))
+           ((:STAT (:ASSIGN T (:DOT (:NAME "this") "name") (:NAME "name")))
+            (:STAT (:ASSIGN T
+                            (:DOT (:NAME "this") "shoeSize")
+                            (:NAME "shoeSize")))))
 </code></pre>
 
 <p>Looks OK. Let's tell Cheat-JS about our function:</p>
@@ -313,8 +314,8 @@ the expansion show above (s-expression starting with <code>(:FUNCTION...</code>)
 
 <h3>Defining <code>@iife</code></h3>
 
-<p>Again, we'll go through the invocation, expansion and implementation
-for the macro.</p>
+<p>Again, we'll see the invocation (both JavaScript and <code>parse-js</code> AST),
+expansion and implementation for the macro.</p>
 
 <p>Let's recall the JavaScript for the invocation from the examples
 above:</p>
@@ -337,26 +338,25 @@ statements. Let's tell Cheat-JS:</p>
 <p>We can now ask the parser for the invocation AST. We'll work with a
 simplified invocation, though - the example above will generate a
 large AST, and we can just as well manage with a smaller one. It's
-better if our invocation has more than one statement, so let's try
-this:</p>
+also better if our invocation has more than one statement, so let's
+try this:</p>
 
-<pre><code>&gt; (cheat-js:parse-js "var a = @iife(alert(1);alert(2););")
+<pre><code>&gt; (cheat-js:parse-js "var a = @iife(alert(1); return 1;);")
 (:TOPLEVEL
  ((:VAR
    (("a" :MACRO-CALL (:NAME "@iife")
      (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
-            (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))))))
+            (:RETURN (:NUM 1))))))))
 </code></pre>
 
 <p>The expansion we desire for this invocation:</p>
 
-<pre><code>&gt; (cheat-js:parse-js "var a = (function() { alert(1); alert(2); })();")
+<pre><code>&gt; (cheat-js:parse-js "var a = (function() { alert(1); return 1; })();")
 (:TOPLEVEL
  ((:VAR
    (("a" :CALL
      (:FUNCTION NIL NIL
-      ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
-       (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+      ((:STAT (:CALL (:NAME "alert") ((:NUM 1)))) (:RETURN (:NUM 1))))
      NIL)))))
 </code></pre>
 
@@ -364,33 +364,36 @@ this:</p>
 
 <pre><code>(:MACRO-CALL (:NAME "@iife")
   (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))
-         (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+         (:RETURN (:NUM 1))))
 </code></pre>
 
 <p>into:</p>
 
 <pre><code>(:CALL (:FUNCTION NIL NIL
          ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
-          (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+          (:RETURN (:NUM 1))))
        NIL)
 </code></pre>
 
 <p>The function to do this is:</p>
 
-<pre><code>(defun iife-expander (invocation)
-  `(:CALL (:FUNCTION NIL NIL ,(rest (third invocation)))
+<pre><code>(defun iife-expander (body)
+  `(:CALL (:FUNCTION NIL NIL ,body)
           NIL))
 </code></pre>
 
+<p>Since we told Cheat-JS this is a 'body only' macro, it extracts the
+body from the <code>:MACRO-CALL</code> AST and passes it to our expander.</p>
+
 <p>A quick test:</p>
 
-<pre><code>&gt; (let ((invocation '(:MACRO-CALL (:NAME "@iife")
-                      (:BODY (:STAT (:CALL (:NAME "alert") ((:NUM 1))))))))
-       (iife-expander invocation))
+<pre><code>&gt; (let ((body '((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+                (:RETURN (:NUM 1)))))
+    (iife-expander body))
 (:CALL
  (:FUNCTION NIL NIL
-  ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
-   (:STAT (:CALL (:NAME "alert") ((:NUM 2))))))
+            ((:STAT (:CALL (:NAME "alert") ((:NUM 1))))
+             (:RETURN (:NUM 1))))
  NIL)
 </code></pre>
 
@@ -401,20 +404,20 @@ this:</p>
 
 <p>Let's use it:</p>
 
-<pre><code>&gt; (cheat-js:explode "var a = @iife(alert(1);alert(2););")
+<pre><code>&gt; (cheat-js:explode "var a = @iife(alert(1); return 1;);")
 "var a = function() {
     alert(1);
-    alert(2);
+    return 1;
 }();"
 </code></pre>
 
 <p>Oops. Some parens got dropped. This is not really an issue, the
 resulting JavaScript is still valid. Let's try another example:</p>
 
-<pre><code>&gt; (cheat-js:explode "@iife(alert(1);alert(2););")
+<pre><code>&gt; (cheat-js:explode "@iife(alert(1); return 1;);")
 "(function() {
     alert(1);
-    alert(2);
+    return 1;
 })();"
 </code></pre>
 
