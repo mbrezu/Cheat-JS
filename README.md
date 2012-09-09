@@ -585,7 +585,7 @@ variable in the 'let' part. Let's use this invocation:
 
 This is an 'args and body' macro (the `test1, 1, test2, 2, test3, 3`
 is the 'args' part, `f(t1, t2, t3);` is the body). They are separated
-by a semicolon. Let's tell CheatJS about this macro:
+by a semicolon. Let's tell Cheat-JS about this macro:
 
     > (cheat-js:register-args-and-body-macro "@whenLet")
 
@@ -767,7 +767,7 @@ It works!
 
 ### Conclusion
 
-To define a CheatJS macro, you need to know the three things required
+To define a Cheat-JS macro, you need to know the three things required
 for any macro: the invocation, the expansion, the transformation. 
 
 You also need to call one of the `cheat-js:register-*-macro` functions
