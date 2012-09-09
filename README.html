@@ -1,23 +1,5 @@
 <h1>Cheat-JS - macros for JavaScript. Kinda.</h1>
 
-<h2>Important Note</h2>
-
-<p>Cheat-JS includes a modified version of
-<a href="http://marijnhaverbeke.nl/parse-js/"><code>parse-js</code></a>, written by Marijn
-Haverbeke. This is necessary because I (Miron Brezuleanu) needed to
-modify <code>parse-js</code> a little. The license of <code>parse-js</code> is in the
-<code>LICENSE-parse-js.txt</code> file. The modified files from <code>parse-js</code>
-included in Cheat-JS are <code>parse.lisp</code>, <code>tokenize.lisp</code> and
-<code>util.lisp</code>. The modifications were permitted by the <code>parse-js</code>
-license. This is not an official copy of <code>parse-js</code> and is not
-supported by Marijn Haverbeke. If the modified parsing code in
-Cheat-JS breaks, it's exclusively my fault - I messed up the code.</p>
-
-<p>Cheat-JS also uses
-<a href="https://github.com/mishoo/cl-uglify-js"><code>cl-uglify-js</code></a> unmodified,
-via <a href="http://www.quicklisp.org/">Quicklisp</a>. These two libraries do
-most of the work, Cheat-JS is mostly 'glue code'.</p>
-
 <h2>About Cheat-JS</h2>
 
 <p>Lisp macros are powerful and easy to implement because Lisp programs
@@ -30,8 +12,10 @@ JavaScript, if it were possible to convert the JavaScript code into
 s-expressions, transform it, and convert it back into JavaScript code.</p>
 
 <p>Turns out that we can transform JavaScript code into an AST made of
-s-expressions using <code>parse-js</code>. Converting back into JavaScript code
-can be done with <code>cl-uglify-js</code> (ironically,
+s-expressions using
+<a href="http://marijnhaverbeke.nl/parse-js/"><code>parse-js</code></a>. Converting back
+into JavaScript code can be done with
+<a href="https://github.com/mishoo/cl-uglify-js"><code>cl-uglify-js</code></a> (ironically,
 <code>cl-uglify-js:ast-gen-code</code> is a capable pretty printer). All that
 remains to be done to have macros (well, defined in another language)
 is define transformations to be applied on the output of
@@ -44,7 +28,23 @@ people who privately do similar things with tools like <code>parse-js</code> and
 the pretty-printer part of <code>cl-uglify-js</code> - that, or my Google skills
 failed me :)</p>
 
-<h2>BIG WARNING</h2>
+<h3>Important Note</h3>
+
+<p>Cheat-JS includes a modified version of <code>parse-js</code>, written by Marijn
+Haverbeke. This is necessary because I (Miron Brezuleanu) needed to
+modify <code>parse-js</code> a little. The license of <code>parse-js</code> is in the
+<code>LICENSE-parse-js.txt</code> file. The modified files from <code>parse-js</code>
+included in Cheat-JS are <code>parse.lisp</code>, <code>tokenize.lisp</code> and
+<code>util.lisp</code>. The modifications were permitted by the <code>parse-js</code>
+license. This is not an official copy of <code>parse-js</code> and is not
+supported by Marijn Haverbeke. If the modified parsing code in
+Cheat-JS breaks, it's exclusively my fault - I messed up the code.</p>
+
+<p>Cheat-JS also uses <code>cl-uglify-js</code> unmodified, via
+<a href="http://www.quicklisp.org/">Quicklisp</a>. These two libraries do most of
+the work, Cheat-JS is mostly 'glue code'.</p>
+
+<h3>BIG WARNING</h3>
 
 <p>I haven't used Cheat-JS on any large projects. I don't have enough
 imagination to compensate for this lack of experience, so it may have
@@ -124,14 +124,14 @@ statements instead of a list of parameters (see the invocation of
 
 <p>Cheat-JS makes it possible to write:</p>
 
-<pre><code>@when-let(test, someTest();
+<pre><code>@whenLet(test, someTest();
     console.log("Yes!");
     console.log("We passed the test!");
 );
 </code></pre>
 
 <p>This macro is similar to
-<a href="http://common-lisp.net/project/alexandria/draft/alexandria.html#Data-and-Control-Flow"><code>alexandria:when-let</code></a>. <code>@when-let</code>
+<a href="http://common-lisp.net/project/alexandria/draft/alexandria.html#Data-and-Control-Flow"><code>alexandria:when-let</code></a>. <code>@whenLet</code>
 has the most complicated interface possible for a Cheat-JS macro: its
 argument list has both expressions (<code>test</code>, <code>someTest()</code>) and
 statements (the <code>console.log</code> call). When invoking such macros,
@@ -139,13 +139,12 @@ separate the expressions and the statements with a semicolon, as in
 the example above.</p>
 
 <p>It is of course possible to define the anaphoric version of
-<code>@when-let</code>, <code>@awhen</code> (from
+<code>@whenLet</code>, <code>@awhen</code> (from
 <a href="http://paulgraham.com/onlisp.html">OnLisp</a>, page 190).</p>
 
-<p>The guide on how to write Cheat-JS macros is based on defining
-<code>@defclass</code> (and even a safer version of <code>@defclass</code>), <code>@iife</code>,
-<code>@when-let</code> and <code>@awhen</code>. So all potential misteries introduced by
-this section will be cleared by the end of this document.</p>
+<p>The guide on how to write Cheat-JS macros (below in this document) is
+based on defining <code>@defclass</code> (and even a safer version of
+<code>@defclass</code>), <code>@iife</code>, <code>@whenLet</code> and <code>@awhen</code>.</p>
 
 <h2>Getting started</h2>
 
@@ -560,7 +559,7 @@ source and target ASTs. The invocation:</p>
 <p>Wow. This time we generate more code. In order to have macros over
 ASTs of manageable dimensions, we'd better combine them.</p>
 
-<h3>Defining <code>@when-let</code></h3>
+<h3>Defining <code>@whenLet</code></h3>
 
 <h3>Defining <code>@awhen</code></h3>
 

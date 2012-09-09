@@ -5,9 +5,8 @@
 
 (in-suite :cheat-js-tests)
 
-(defun defclass-expander (invocation)
-  (let* ((raw-names (cdr (second (third invocation))))
-         (names (mapcar #'second raw-names)))
+(defun defclass-expander (args)
+  (let* ((names (mapcar #'second args)))
     `(:function nil ,names
                 ,(mapcar (lambda (name)
                            `(:stat
@@ -24,8 +23,7 @@
                '(:TOPLEVEL
                  ((:VAR
                    (("Person" :MACRO-CALL (:NAME "@defclass")
-                              (:ARGS (:SEQ (:NAME "name")
-                                           (:NAME "shoeSize"))))))))))
+                              (:ARGS (:NAME "name") (:NAME "shoeSize")))))))))
     (cheat-js:register-macro-expander "@defclass" #'defclass-expander)
     (is (equal (cheat-js:explode js-code)
                "var Person = function(name, shoeSize) {
@@ -33,8 +31,8 @@
     this.shoeSize = shoeSize;
 };"))))
 
-(defun iife-expander (invocation)
-  `(:CALL (:FUNCTION NIL NIL ,(rest (third invocation)))
+(defun iife-expander (body)
+  `(:CALL (:FUNCTION NIL NIL ,body)
           NIL))
 
 (test iife
