@@ -1,5 +1,7 @@
 <h1>Cheat-JS - macros for JavaScript. Kinda.</h1>
 
+<p>This document assumes you know Commmon Lisp and JavaScript.</p>
+
 <h2>About Cheat-JS</h2>
 
 <p>Lisp macros are powerful and easy to implement because Lisp programs
@@ -619,7 +621,162 @@ works.</p>
 
 <h3>Defining <code>@whenLet</code></h3>
 
+<p>The <code>@whenLet</code> invocation in the examples isn't very suitable for
+defining <code>@whenLet</code>. We can do with a shorter body and more than one
+variable in the 'let' part. Let's use this invocation:</p>
+
+<pre><code>@whenLet(t1, 1, t2, 2, t3, 3; f(t1, t2, t3););
+</code></pre>
+
+<p>This is an 'args and body' macro (the <code>test1, 1, test2, 2, test3, 3</code>
+is the 'args' part, <code>f(t1, t2, t3);</code> is the body. They are separated
+by a semicolon. Let's tell CheatJS about this macro:</p>
+
+<pre><code>&gt; (cheat-js:register-args-and-body-macro "@whenLet")
+</code></pre>
+
+<p>The AST of the invocation:</p>
+
+<pre><code>&gt; (cheat-js:parse-js "@whenLet(t1, 1, t2, 2, t3, 3; f(t1, t2, t3););")
+(:TOPLEVEL
+ ((:STAT
+   (:MACRO-CALL (:NAME "@whenLet")
+    ((:ARGS (:NAME "t1") (:NUM 1) (:NAME "t2") (:NUM 2) (:NAME "t3") (:NUM 3))
+     (:BODY
+      (:STAT (:CALL (:NAME "f") ((:NAME "t1") (:NAME "t2") (:NAME "t3"))))))))))
+</code></pre>
+
+<p>The <code>:MACRO-CALL</code> node has subnodes for both <code>:ARGS</code> and <code>:BODY</code>, they
+will be both passed to our expander function.</p>
+
+<p>What about the expansion? As the
+<a href="http://common-lisp.net/project/alexandria/draft/alexandria.html#Data-and-Control-Flow"><code>when-let</code> documentation</a>
+says, <code>@whenLet</code> should run the statements in its body if all the
+bound variables are true. And it would be nice to have a new scope for
+our variables, so this is a suitable expansion:</p>
+
+<pre><code>(function(t1, t2, t3) {
+    if (t1 &amp;&amp; t2 &amp;&amp; t3) {
+        f(t1, t2, t3);
+    }
+})(1, 2, 3);
+</code></pre>
+
+<p>The AST of the expansion:</p>
+
+<pre><code>&gt;(cheat-js:parse-js "(function(t1, t2, t3) {
+             if (t1 &amp;&amp; t2 &amp;&amp; t3) {
+                 f(t1, t2, t3);
+             }
+         })(1, 2, 3);")
+(:TOPLEVEL
+ ((:STAT
+   (:CALL
+    (:FUNCTION NIL ("t1" "t2" "t3")
+     ((:IF (:BINARY :&amp;&amp; (:BINARY :&amp;&amp; (:NAME "t1") (:NAME "t2")) (:NAME "t3"))
+       (:BLOCK
+        ((:STAT (:CALL (:NAME "f") ((:NAME "t1") (:NAME "t2") (:NAME "t3"))))))
+       NIL)))
+    ((:NUM 1) (:NUM 2) (:NUM 3))))))
+</code></pre>
+
+<p>So we need to transform the <code>:MACRO-CALL</code> node of the invocation into
+the topmost <code>:CALL</code> node of the expansion:</p>
+
+<pre><code>(defun when-let-expander (args body)
+  (let* ((grouped-args (group args 2))
+         (arg-vars (mapcar #'first grouped-args))
+         (arg-values (mapcar #'second grouped-args))
+         (arg-var-names (mapcar #'second arg-vars)))
+    `(:CALL
+      (:FUNCTION NIL ,arg-var-names
+                 ((:IF ,(make-binary-and-ast arg-vars)
+                       (:BLOCK
+                        ,body)
+                       NIL)))
+      ,arg-values)))
+</code></pre>
+
+<p>Notice that <code>when-let-expander</code> has two arguments, <code>args</code> and <code>body</code>,
+which contain the contents of the <code>:ARGS</code> and <code>:BODY</code> nodes of the
+<code>:MACRO-CALL</code> tree. This function uses two helper functions shown
+below:</p>
+
+<pre><code>(defun group (list n)
+  (if (&lt; (length list) n)
+      (if list
+          (list list))
+      (cons (subseq list 0 n)
+            (group (subseq list n) n))))
+
+(defun make-binary-and-ast (operands)
+  (cond ((= 1 (length operands))
+         (first operands))
+        ((= 2 (length operands))
+         (list* :binary :&amp;&amp; operands))
+        ((&gt; (length operands) 2)
+         (let ((first-two (subseq operands 0 2))
+               (rest (subseq operands 2)))
+           (make-binary-and-ast (cons (make-binary-and-ast first-two)
+                                      rest))))
+        (t (error "Incorrect number of operands for @whenLet."))))
+</code></pre>
+
+<p>We need <code>group</code> to help with destructuring the variables and values,
+and <code>make-binary-and-ast</code> to build valid AST trees for 'and'-ing more
+than two operands.</p>
+
+<p>Let's test our function:</p>
+
+<pre><code>&gt; (let ((args '((:NAME "t1") (:NUM 1)
+                (:NAME "t2") (:NUM 2)
+                (:NAME "t3") (:NUM 3)))
+        (body '((:STAT
+                 (:CALL (:NAME "f")
+                        ((:NAME "t1") (:NAME "t2") (:NAME "t3")))))))
+    (when-let-expander args body))
+(:CALL
+ (:FUNCTION NIL ("t1" "t2" "t3")
+  ((:IF (:BINARY :&amp;&amp; (:BINARY :&amp;&amp; (:NAME "t1") (:NAME "t2")) (:NAME "t3"))
+    (:BLOCK
+     ((:STAT (:CALL (:NAME "f") ((:NAME "t1") (:NAME "t2") (:NAME "t3"))))))
+    NIL)))
+ ((:NUM 1) (:NUM 2) (:NUM 3)))
+</code></pre>
+
+<p>The result of the function is identical to our desired expansion, so
+we can install our expander and test our new macro:</p>
+
+<pre><code>&gt; (cheat-js:register-macro-expander "@whenLet" #'when-let-expander)
+&gt; (cheat-js:explode "@whenLet(t1, 1, t2, 2, t3, 3; f(t1, t2, t3););")
+"(function(t1, t2, t3) {
+    if (t1 &amp;&amp; t2 &amp;&amp; t3) {
+        f(t1, t2, t3);
+    }
+})(1, 2, 3);"
+</code></pre>
+
+<p>Exercises: </p>
+
+<ol>
+<li>Can you define <code>@let</code> by simplifyind <code>@whenLet</code> a little?</li>
+<li>Can you define <code>@iife</code> so <code>@iife(console.log(1);)</code> expands into
+<code>@let(;console.log(1);)</code>? Why is the first semicolon (just after the
+opening paren) necessary in the last <code>@let</code> invocation?</li>
+</ol>
+
 <h3>Defining <code>@awhen</code></h3>
+
+<p>... should be very easy. <code>awhen</code>, defined in <em>OnLisp</em>, page 190, is
+just <code>when-let</code> with one anaphoric variable, <code>it</code>. So the invocation:</p>
+
+<pre><code>@awhen(expr;f(it);)
+</code></pre>
+
+<p>should expand into:</p>
+
+<pre><code>@whenLet(it, expr;f(it);)
+</code></pre>
 
 <h2>Troubleshooting</h2>
 

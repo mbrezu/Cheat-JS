@@ -1,6 +1,8 @@
 
 # Cheat-JS - macros for JavaScript. Kinda.
 
+This document assumes you know Commmon Lisp and JavaScript.
+
 ## About Cheat-JS
 
 Lisp macros are powerful and easy to implement because Lisp programs
@@ -570,13 +572,157 @@ It seems to do what we want. Let's install and test it:
             return new Person(name, shoeSize);
         };
     }();"
-    
+
 So composing macros (`@safeDefclass` expands into a call to `@iife`)
 works.
 
 ### Defining `@whenLet`
 
+The `@whenLet` invocation in the examples isn't very suitable for
+defining `@whenLet`. We can do with a shorter body and more than one
+variable in the 'let' part. Let's use this invocation:
+
+    @whenLet(t1, 1, t2, 2, t3, 3; f(t1, t2, t3););
+
+This is an 'args and body' macro (the `test1, 1, test2, 2, test3, 3`
+is the 'args' part, `f(t1, t2, t3);` is the body. They are separated
+by a semicolon. Let's tell CheatJS about this macro:
+
+    > (cheat-js:register-args-and-body-macro "@whenLet")
+
+The AST of the invocation:
+
+    > (cheat-js:parse-js "@whenLet(t1, 1, t2, 2, t3, 3; f(t1, t2, t3););")
+    (:TOPLEVEL
+     ((:STAT
+       (:MACRO-CALL (:NAME "@whenLet")
+        ((:ARGS (:NAME "t1") (:NUM 1) (:NAME "t2") (:NUM 2) (:NAME "t3") (:NUM 3))
+         (:BODY
+          (:STAT (:CALL (:NAME "f") ((:NAME "t1") (:NAME "t2") (:NAME "t3"))))))))))
+
+The `:MACRO-CALL` node has subnodes for both `:ARGS` and `:BODY`, they
+will be both passed to our expander function.
+
+What about the expansion? As the
+[`when-let` documentation](http://common-lisp.net/project/alexandria/draft/alexandria.html#Data-and-Control-Flow)
+says, `@whenLet` should run the statements in its body if all the
+bound variables are true. And it would be nice to have a new scope for
+our variables, so this is a suitable expansion:
+
+    (function(t1, t2, t3) {
+        if (t1 && t2 && t3) {
+            f(t1, t2, t3);
+        }
+    })(1, 2, 3);
+
+The AST of the expansion:
+
+    >(cheat-js:parse-js "(function(t1, t2, t3) {
+                 if (t1 && t2 && t3) {
+                     f(t1, t2, t3);
+                 }
+             })(1, 2, 3);")
+    (:TOPLEVEL
+     ((:STAT
+       (:CALL
+        (:FUNCTION NIL ("t1" "t2" "t3")
+         ((:IF (:BINARY :&& (:BINARY :&& (:NAME "t1") (:NAME "t2")) (:NAME "t3"))
+           (:BLOCK
+            ((:STAT (:CALL (:NAME "f") ((:NAME "t1") (:NAME "t2") (:NAME "t3"))))))
+           NIL)))
+        ((:NUM 1) (:NUM 2) (:NUM 3))))))
+
+So we need to transform the `:MACRO-CALL` node of the invocation into
+the topmost `:CALL` node of the expansion:
+
+    (defun when-let-expander (args body)
+      (let* ((grouped-args (group args 2))
+             (arg-vars (mapcar #'first grouped-args))
+             (arg-values (mapcar #'second grouped-args))
+             (arg-var-names (mapcar #'second arg-vars)))
+        `(:CALL
+          (:FUNCTION NIL ,arg-var-names
+                     ((:IF ,(make-binary-and-ast arg-vars)
+                           (:BLOCK
+                            ,body)
+                           NIL)))
+          ,arg-values)))
+
+Notice that `when-let-expander` has two arguments, `args` and `body`,
+which contain the contents of the `:ARGS` and `:BODY` nodes of the
+`:MACRO-CALL` tree. This function uses two helper functions shown
+below:
+
+    (defun group (list n)
+      (if (< (length list) n)
+          (if list
+              (list list))
+          (cons (subseq list 0 n)
+                (group (subseq list n) n))))
+
+    (defun make-binary-and-ast (operands)
+      (cond ((= 1 (length operands))
+             (first operands))
+            ((= 2 (length operands))
+             (list* :binary :&& operands))
+            ((> (length operands) 2)
+             (let ((first-two (subseq operands 0 2))
+                   (rest (subseq operands 2)))
+               (make-binary-and-ast (cons (make-binary-and-ast first-two)
+                                          rest))))
+            (t (error "Incorrect number of operands for @whenLet."))))
+
+We need `group` to help with destructuring the variables and values,
+and `make-binary-and-ast` to build valid AST trees for 'and'-ing more
+than two operands.
+
+Let's test our function:
+
+    > (let ((args '((:NAME "t1") (:NUM 1)
+                    (:NAME "t2") (:NUM 2)
+                    (:NAME "t3") (:NUM 3)))
+            (body '((:STAT
+                     (:CALL (:NAME "f")
+                            ((:NAME "t1") (:NAME "t2") (:NAME "t3")))))))
+        (when-let-expander args body))
+    (:CALL
+     (:FUNCTION NIL ("t1" "t2" "t3")
+      ((:IF (:BINARY :&& (:BINARY :&& (:NAME "t1") (:NAME "t2")) (:NAME "t3"))
+        (:BLOCK
+         ((:STAT (:CALL (:NAME "f") ((:NAME "t1") (:NAME "t2") (:NAME "t3"))))))
+        NIL)))
+     ((:NUM 1) (:NUM 2) (:NUM 3)))
+     
+The result of the function is identical to our desired expansion, so
+we can install our expander and test our new macro:
+
+    > (cheat-js:register-macro-expander "@whenLet" #'when-let-expander)
+    > (cheat-js:explode "@whenLet(t1, 1, t2, 2, t3, 3; f(t1, t2, t3););")
+    "(function(t1, t2, t3) {
+        if (t1 && t2 && t3) {
+            f(t1, t2, t3);
+        }
+    })(1, 2, 3);"
+    
+Exercises: 
+
+ 1. Can you define `@let` by simplifyind `@whenLet` a little?
+ 2. Can you define `@iife` so `@iife(console.log(1);)` expands into
+ `@let(;console.log(1);)`? Why is the first semicolon (just after the
+ opening paren) necessary in the last `@let` invocation?
+
 ### Defining `@awhen`
+
+... should be very easy. `awhen`, defined in *OnLisp*, page 190, is
+just `when-let` with one anaphoric variable, `it`. So the invocation:
+
+    @awhen(expr;f(it);)
+    
+should expand into:
+
+    @whenLet(it, expr;f(it);)
+    
+
 
 ## Troubleshooting
 
