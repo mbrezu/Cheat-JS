@@ -2,9 +2,9 @@
 
 (asdf:defsystem #:cheat-js
   :serial t
-  :description "TBD: Describe cheat-js here"
+  :description "Macros for JavaScript. Kinda."
   :author "Miron Brezuleanu"
-  :license "TBD: Specify license here"
+  :license "Simplified BSD License"
   :depends-on (#:fiveam
                #:cl-uglify-js)
   :components ((:file "package")
