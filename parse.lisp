@@ -105,7 +105,8 @@
     (and (not strict-semicolons)
          (or (token-newline-before token)
              (token-type-p token :eof)
-             (tokenp token :punc #\}))))
+             (tokenp token :punc #\})
+             (tokenp token :punc #\)))))
   (def semicolonp () (tokenp token :punc #\;))
   (def semicolon ()
     (cond ((semicolonp) (next))
@@ -317,7 +318,7 @@
                      closing-char
                      (token-id token)))
       (next) ;; The semicolon between args and body (or the closing
-             ;; paren).
+      ;; paren).
       args))
 
   (def macro-custom-parse ()
