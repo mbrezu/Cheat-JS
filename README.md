@@ -1,7 +1,7 @@
 
 # Cheat-JS - macros for JavaScript. Kinda.
 
-This document assumes you already know Commmon Lisp and JavaScript.
+This document assumes you already know Common Lisp and JavaScript.
 
 ## About Cheat-JS
 
