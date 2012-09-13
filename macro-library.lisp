@@ -19,25 +19,25 @@
            (self-name (or (if candidate-self-name (subseq candidate-self-name 1))
                           "self"))
            (class-name (first filtered-names))
+           (inner-class-name (format nil "_~a" class-name))
            (field-names (rest filtered-names)))
       `(:MACRO-CALL
         (:NAME "@iife")
         (:BODY
-         (:DEFUN ,class-name ,field-names
+         (:DEFUN ,inner-class-name ,field-names
            ,(mapcar (lambda (field)
                       `(:STAT (:ASSIGN T
                                        (:DOT (:NAME "this") ,field)
                                        (:NAME ,field))))
                     field-names))
-         (:BLOCK NIL)
-         (:RETURN
-           (:FUNCTION NIL ,field-names
-                      ((:var ((,self-name :NEW (:NAME ,class-name)
-                                          ,(mapcar (lambda (field)
-                                                     (list :name field))
-                                                   field-names))))
-                       ,@body
-                       (:RETURN (:name ,self-name))))))))))
+         (:DEFUN ,class-name ,field-names
+           ((:var ((,self-name :NEW (:NAME ,inner-class-name)
+                               ,(mapcar (lambda (field)
+                                          (list :name field))
+                                        field-names))))
+            ,@body
+            (:RETURN (:name ,self-name))))
+         (:RETURN (:name ,class-name)))))))
 
 (defun if-expander (args)
   `(:conditional ,@args))

@@ -202,49 +202,55 @@
 
 (test library-defclass-1
   (init-library-tests)
-  (one-library-test "var Person = @defclass(name, shoeSize);"
+  (one-library-test "var Person = @defclass(Person, name, shoeSize);"
                     "var Person = function() {
-    function name(shoeSize) {
+    function _Person(name, shoeSize) {
+        this.name = name;
         this.shoeSize = shoeSize;
     }
-    return function(shoeSize) {
-        var self = new name(shoeSize);
+    function Person(name, shoeSize) {
+        var self = new _Person(name, shoeSize);
         return self;
-    };
+    }
+    return Person;
 }();"))
 
 (test library-defclass-2
   (init-library-tests)
   (one-library-test "var Person = @defclass(
-    name, shoeSize; 
+    Person, name, shoeSize;
     self.firstName = name.split(' ')[0];
 );"
                     "var Person = function() {
-    function name(shoeSize) {
+    function _Person(name, shoeSize) {
+        this.name = name;
         this.shoeSize = shoeSize;
     }
-    return function(shoeSize) {
-        var self = new name(shoeSize);
+    function Person(name, shoeSize) {
+        var self = new _Person(name, shoeSize);
         self.firstName = name.split(\" \")[0];
         return self;
-    };
+    }
+    return Person;
 }();"))
 
 (test library-defclass-3
   (init-library-tests)
   (one-library-test "var Person = @defclass(
-    name, shoeSize, $that;
+    Person, name, shoeSize, $that;
     that.firstName = name.split(' ')[0];
 );"
                     "var Person = function() {
-    function name(shoeSize) {
+    function _Person(name, shoeSize) {
+        this.name = name;
         this.shoeSize = shoeSize;
     }
-    return function(shoeSize) {
-        var that = new name(shoeSize);
+    function Person(name, shoeSize) {
+        var that = new _Person(name, shoeSize);
         that.firstName = name.split(\" \")[0];
         return that;
-    };
+    }
+    return Person;
 }();"))
 
 (test library-if
