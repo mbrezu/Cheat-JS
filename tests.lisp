@@ -175,3 +175,174 @@
         f(expr);
     }
 })(expr);")))
+
+(defun init-library-tests ()
+  (cheat-js:clear-macros)
+  (cj-macro-library:install-macros (cj-macro-library:list-macros))
+  (cj-macro-library:reset-gensym-counter))
+
+(defun one-library-test (invocation expansion)
+  (is (equal (cheat-js:explode invocation)
+             expansion)))
+
+(test library-iife-1
+  (init-library-tests)
+  (one-library-test "var Test = @iife(return 2;);"
+                    "var Test = function() {
+    return 2;
+}();"))
+
+(test library-iife-2
+  (init-library-tests)
+  (one-library-test "@iife(doThis(); thenDoThat(););"
+                    "(function() {
+    doThis();
+    thenDoThat();
+})();"))
+
+(test library-defclass-1
+  (init-library-tests)
+  (one-library-test "var Person = @defclass(name, shoeSize);"
+                    "var Person = function() {
+    function name(shoeSize) {
+        this.shoeSize = shoeSize;
+    }
+    return function(shoeSize) {
+        var self = new name(shoeSize);
+        return self;
+    };
+}();"))
+
+(test library-defclass-2
+  (init-library-tests)
+  (one-library-test "var Person = @defclass(
+    name, shoeSize; 
+    self.firstName = name.split(' ')[0];
+);"
+                    "var Person = function() {
+    function name(shoeSize) {
+        this.shoeSize = shoeSize;
+    }
+    return function(shoeSize) {
+        var self = new name(shoeSize);
+        self.firstName = name.split(\" \")[0];
+        return self;
+    };
+}();"))
+
+(test library-defclass-3
+  (init-library-tests)
+  (one-library-test "var Person = @defclass(
+    name, shoeSize, $that;
+    that.firstName = name.split(' ')[0];
+);"
+                    "var Person = function() {
+    function name(shoeSize) {
+        this.shoeSize = shoeSize;
+    }
+    return function(shoeSize) {
+        var that = new name(shoeSize);
+        that.firstName = name.split(\" \")[0];
+        return that;
+    };
+}();"))
+
+(test library-if
+  (init-library-tests)
+  (one-library-test "var a = @if(someCondition,thenResult,elseResult);"
+                    "var a = someCondition ? thenResult : elseResult;"))
+
+(test library-and-or
+  (init-library-tests)
+  (one-library-test "if (@and(cond1,cond2,cond3,@or(cond4,cond5))) { doIt(); }"
+                    "if (cond1 && cond2 && cond3 && (cond4 || cond5)) {
+    doIt();
+}"))
+
+(test library-fn
+  (init-library-tests)
+  (one-library-test "@fn(a, b; a < b)"
+                    "function(a, b) {
+    return a < b;
+};"))
+
+(test library-fn0
+  (init-library-tests)
+  (one-library-test "var action = @fn0(
+    doThis();
+    thenDoThat();
+);"
+                    "var action = function() {
+    doThis();
+    thenDoThat();
+};"))
+
+(test library-dbind-1
+  (init-library-tests)
+  (one-library-test "@dbind([a, b], [1, 2]);"
+                    "{
+    var tmp1 = [ 1, 2 ], a = tmp1[0], b = tmp1[1];
+};"))
+
+(test library-dbind-2
+  (init-library-tests)
+  (one-library-test "@dbind([a, b, c], [1, 2, 'a']);"
+                    "{
+    var tmp1 = [ 1, 2, \"a\" ], a = tmp1[0], b = tmp1[1], c = tmp1[2];
+};"))
+
+(test library-dotimes-1
+  (init-library-tests)
+  (one-library-test "@dotimes(a+b; doit());"
+                    "{
+    var limit2 = a + b;
+    for (var i1 = 0; i1 < limit2; i1++) {
+        doit();
+    }
+};"))
+
+(test library-dotimes-2
+  (init-library-tests)
+  (one-library-test "@dotimes(j, a+b; doit());"
+                    "{
+    var limit1 = a + b;
+    for (var j = 0; j < limit1; j++) {
+        doit();
+    }
+};"))
+
+(test library-dolist-1
+  (init-library-tests)
+  (one-library-test "@dolist(j, $i, a(b); doIt(i, j); doItAgain(j););"
+                    "{
+    var list1 = a(b), len2 = list1.length;
+    for (var i = 0; i < len2; i++) {
+        var j = list1[i];
+        doIt(i, j);
+        doItAgain(j);
+    }
+};"))
+
+(test library-dolist-2
+  (init-library-tests)
+  (one-library-test "@dolist(j, a(b), $i; doIt(i, j); doItAgain(j););"
+                    "{
+    var list1 = a(b), len2 = list1.length;
+    for (var i = 0; i < len2; i++) {
+        var j = list1[i];
+        doIt(i, j);
+        doItAgain(j);
+    }
+};"))
+
+(test library-dolist-3
+  (init-library-tests)
+  (one-library-test "@dolist(j, a(b); doIt(j); doItAgain(j););"
+                    "{
+    var list2 = a(b), len3 = list2.length;
+    for (var i1 = 0; i1 < len3; i1++) {
+        var j = list2[i1];
+        doIt(j);
+        doItAgain(j);
+    }
+};"))

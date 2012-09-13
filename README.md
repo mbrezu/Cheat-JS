@@ -765,6 +765,12 @@ Let's install the expander and test `@awhen`:
     
 It works!
 
+### More macros
+
+See the
+[reference](https://github.com/mbrezu/Cheat-JS/blob/master/REFERENCE.md)
+for macros already packaged with Cheat-JS.
+
 ### Conclusion
 
 To define a Cheat-JS macro, you need to know the three things required
@@ -846,3 +852,4 @@ it useful (or at least amusing - or both)!
 Please use the Github
 [issues page](https://github.com/mbrezu/cheat-js/issues) to report any
 bugs or to post feature requests.
+

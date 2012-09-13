@@ -26,3 +26,9 @@
 (defpackage #:cheat-js-tests
   (:use #:cl #:fiveam))
 
+(defpackage #:cj-macro-library
+  (:use #:cl)
+  (:export
+   :reset-gensym-counter
+   :list-macros
+   :install-macros))

@@ -12,4 +12,5 @@
                (:file "tokenize" :depends-on ("package" "util"))
                (:file "parse" :depends-on ("package" "util" "tokenize"))
                (:file "cheat-js" :depends-on ("parse"))
+               (:file "macro-library" :depends-on ("cheat-js"))
                (:file "tests" :depends-on ("cheat-js"))))
